@@ -7,6 +7,8 @@ describe('tokenizer', () => {
     <div>111</div>
     <div :value="name">222</div>
     <div>333</div>
+    <div onClick="click" />
+    </div>
     `)
   });
 })

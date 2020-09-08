@@ -1,15 +1,4 @@
-// 匹配结束标签
-const END_TAG_REG = /^<\s*\/\s*([a-z-_]+)\s*>/i
-// 匹配开始标签
-const START_TAG_REG = /^<\s*([a-z-_]+)\s*([^>]*)>/i
-// 判断是否为自闭和标签
-const CLOSE_TAG_REG = /\/\s*$/
-// 匹配属性
-const ATTR_REG = /([\w:]+)\s*(=\s*"([^"]+)")?/ig
-// 判断是否为动态属性
-const EXPRESS = /^:/
-// 提取文本节点
-const TEXT_REG = /^[^<>]+/
+import { START_TAG_REG, END_TAG_REG, ATTR_REG, CLOSE_TAG_REG, TEXT_REG, isBlank, EXPRESS } from './utils';
 
 enum NodeType {
   /**
@@ -22,7 +11,7 @@ enum NodeType {
   ATTR = "attr",
   CLOSE = "close",
   END = "end",
-  TEXT = "text",
+  TEXT_NODE = "text",
   FRAGMENT = "Fragment",
   EXPRESS = "express"
 }
@@ -43,9 +32,21 @@ interface NodeItem {
 export const tokenizer = (input: string): NodeItem[] => {
   const tokens: NodeItem[] = [];
   const stack: string[] = [];
-
+  let col: number = 0;
+  let row: number = 0;
 
   while (input.length) {
+    if (isBlank(input[0])) {
+      input = input.slice(1);
+
+      // reset
+      if (input[0] === '\n') {
+        col = 0;
+        row += 1;
+      }
+      col++;
+      continue;
+    }
 
     if (START_TAG_REG.test(input)) {
       const match = input.match(START_TAG_REG);
@@ -56,33 +57,31 @@ export const tokenizer = (input: string): NodeItem[] => {
         input = input.slice(str.length);
 
         if (attrsStr) {
-          let rst = attrsStr;
+          let matchAttr: RegExpExecArray | null;
 
-          while (ATTR_REG.exec(rst) !== null) {
-            const [str, attrName, _, attrValue] = ATTR_REG.exec(rst) as RegExpExecArray;
-            rst = rst.slice(str.length);
+          while ((matchAttr = ATTR_REG.exec(attrsStr)) != null) {
+            const [attrStr, attrName, _, attrValue] = matchAttr;
 
             // 判断是否为表达式属性
             if (EXPRESS.test(attrName)) {
               attrs.push({ type: NodeType.EXPRESS, name: attrName.slice(1), value: attrValue, })
               continue
             }
+
             // 普通属性
             attrs.push({ type: NodeType.ATTR, name: attrName, value: attrValue, })
           }
         }
 
         // 判断是否是自闭合标签 "class=\"sas\" test=\"sada\"/"
-        if (!CLOSE_TAG_REG.test(attrsStr)) {
+        if (CLOSE_TAG_REG.test(attrsStr)) {
+          tokens.push({ type: NodeType.CLOSE, tag: tagName, attrs })
+        } else {
           stack.push(tagName)
           tokens.push({ type: NodeType.START, tag: tagName, attrs })
-        } else {
-          // 将最后一个 / 替换掉
-          attrsStr.replace(CLOSE_TAG_REG, '')
-          tokens.push({ type: NodeType.CLOSE, tag: tagName, attrs })
         }
       }
-      
+
       continue;
     }
 
@@ -93,7 +92,7 @@ export const tokenizer = (input: string): NodeItem[] => {
         const [str] = match;
         input = input.slice(str.length);
         tokens.push({
-          type: NodeType.TEXT,
+          type: NodeType.TEXT_NODE,
           value: str
         })
       }
